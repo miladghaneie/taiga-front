@@ -59,13 +59,39 @@ Medium = ($translate, $confirm, $storage, wysiwygService, animationFrame, tgLoad
     addCodeBlockAndHightlight = (range, elm) ->
         pre = document.createElement('pre')
         code = document.createElement('code')
+        start = range.startContainer.parentNode.previousSibling
+
+        code.appendChild(range.extractContents())
 
         pre.appendChild(code)
-        code.appendChild(range.extractContents())
-        range.insertNode(pre)
 
-        elm.checkContentChanged()
-        preventEditPre()
+        start.parentNode.insertBefore(pre, start.nextSibling)
+
+        refreshCodeBlocks(elm)
+
+    refreshCodeBlocks = (mediumInstance) ->
+        # clean empty <p> content editable adds it when range.extractContents has been execute it
+        for mainChildren in mediumInstance.elements[0].children
+            if mainChildren && mainChildren.tagName.toLowerCase() == 'p' && !mainChildren.innerText.length
+                mainChildren.parentNode.removeChild(mainChildren)
+
+        preList = mediumInstance.elements[0].querySelectorAll('pre')
+
+        for pre in preList
+            # prevent edit a pre
+            pre.setAttribute('contenteditable', false)
+
+            if pre.nextElementSibling && pre.nextElementSibling.nodeName.toLowerCase() == 'p' && !pre.nextElementSibling.children.length
+                pre.nextElementSibling.appendChild(document.createElement('br'))
+
+            # add p after every pre
+            else if !pre.nextElementSibling || pre.nextElementSibling.nodeName.toLowerCase() != 'p'
+                p = document.createElement('p')
+                p.appendChild(document.createElement('br'))
+
+                pre.parentNode.insertBefore(p, pre.nextSibling)
+
+        mediumInstance.checkContentChanged(mediumInstance.elements[0])
 
     AlignRightButton = MediumEditor.extensions.button.extend({
         name: 'rtl',
@@ -120,7 +146,7 @@ Medium = ($translate, $confirm, $storage, wysiwygService, animationFrame, tgLoad
                 removeCodeBlockAndHightlight(range.endContainer, this.base)
             else
                 addCodeBlockAndHightlight(range, this.base)
-                removeSelections()
+                # removeSelections()
     })
 
     CustomPasteHandler = MediumEditor.extensions.paste.extend({
@@ -169,17 +195,11 @@ Medium = ($translate, $confirm, $storage, wysiwygService, animationFrame, tgLoad
         wysiwygCodeHightlighterService.getLanguages().then (codeLans) ->
             $scope.codeLans = codeLans
 
-        preventEditPre = () ->
-            preList = editorMedium[0].querySelectorAll('pre')
-
-            for pre in preList
-                pre.setAttribute('contenteditable', false)
-
         setHtmlMedium = (markdown) ->
             html = wysiwygService.getHTML(markdown)
             editorMedium.html(html)
             wysiwygCodeHightlighterService.addHightlighter(mediumInstance.elements[0])
-            preventEditPre()
+            refreshCodeBlocks(mediumInstance)
 
         $scope.saveSnippet = (lan, code) ->
             $scope.codeEditorVisible = false
@@ -198,6 +218,7 @@ Medium = ($translate, $confirm, $storage, wysiwygService, animationFrame, tgLoad
                     codePre.className = ''
 
                 wysiwygCodeHightlighterService.hightlightCode(codeBlockSelected)
+                mediumInstance.checkContentChanged(mediumInstance.elements[0])
             else
                 codeBlockSelected.parentNode.parentNode.removeChild(codeBlockSelected.parentNode)
                 mediumInstance.checkContentChanged(mediumInstance.elements[0])
@@ -472,7 +493,7 @@ Medium = ($translate, $confirm, $storage, wysiwygService, animationFrame, tgLoad
 
             $scope.$applyAsync () ->
                 wysiwygCodeHightlighterService.addHightlighter(mediumInstance.elements[0])
-                preventEditPre()
+                refreshCodeBlocks(mediumInstance)
 
         $(editorMedium[0]).on 'dblclick', 'pre', (e) ->
             $scope.$applyAsync () ->
